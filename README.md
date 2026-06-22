@@ -1,6 +1,6 @@
-# Pokemon Poker
+# Type Flush Hold'em
 
-A Vercel-ready static web game for a $25 guaranteed-prize Pokemon Poker concept.
+A Vercel-ready static web game for a $25 guaranteed-prize Pokemon-card Hold'em concept.
 
 ## Card mapping
 
@@ -18,13 +18,16 @@ A Vercel-ready static web game for a $25 guaranteed-prize Pokemon Poker concept.
 | Male Trainer | King |
 | Energy | Ace |
 
-## Game rules included
+## Hold'em game rules included
 
 - Entry shown in the UI: $25.
-- The player plays until 5 scored hands are complete.
-- Each hand deals 5 cards to the player and 5 cards to the dealer from a fresh 52-card deck.
-- Standard poker rankings are used.
-- Ties push and do not count toward the 5 scored hands.
+- The player plays until 5 scored showdowns are complete.
+- Each showdown uses a fresh 52-card Pokemon-style poker deck.
+- The player gets 2 private hole cards.
+- The dealer gets 2 private hole cards, hidden until showdown.
+- Both sides share a 5-card community board: flop, turn, and river.
+- The winner is the best 5-card poker hand from each side's 2 hole cards plus the shared 5-card board.
+- Ties push and do not count toward the 5 scored showdowns.
 - Trivia questions unlock each hand but do not alter the card odds.
 - Every player receives a guaranteed prize.
 
@@ -37,7 +40,25 @@ A Vercel-ready static web game for a $25 guaranteed-prize Pokemon Poker concept.
 | 4 wins | English Pack 2 + 1 English Pack | $34 | $25 |
 | 5 wins | English Pack 3 + 1 English Pack | $50 | $34 |
 
-This produces about 81.5% retail RTP when resolved hands are treated as roughly 50/50.
+This produces about 81.5% retail RTP when resolved showdowns are treated as roughly 50/50.
+
+## Card images
+
+This build uses external card-art URLs in `src/cardImages.js` plus a CSS fallback. The default URLs point to public card-image links and are not bundled into the project.
+
+To use specific images you found through Google Images:
+
+1. Open the source page for each image.
+2. Verify the usage rights and license terms.
+3. Replace or add entries in `CARD_IMAGE_OVERRIDES` in `src/cardImages.js`.
+
+Example:
+
+```js
+export const CARD_IMAGE_OVERRIDES = {
+  "fire-A": "https://your-approved-image-source.example/fire-energy.png"
+};
+```
 
 ## Run locally
 
@@ -87,13 +108,12 @@ Most game logic is in `src/engine.js`:
 - `TYPES`
 - `RANKS`
 - `TRIVIA_QUESTIONS`
+- `dealHoldemRound`
+- `scoreHoldemRound`
+- `evaluateBestHand`
 
 The interface is in:
 
 - `index.html`
 - `styles.css`
 - `src/app.js`
-
-## Asset note
-
-This build uses original CSS card designs and does not include official Pokemon card art or official assets. Replace the text-card renderer with approved assets only if you want real card images.

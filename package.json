@@ -1,8 +1,8 @@
 {
-  "name": "pokemon-poker-prize-game",
-  "version": "1.0.0",
+  "name": "type-flush-holdem",
+  "version": "1.1.0",
   "private": true,
-  "description": "A Vercel-ready static Pokemon Poker prize game.",
+  "description": "A Vercel-ready static Pokemon-card Hold'em prize game.",
   "type": "module",
   "scripts": {
     "dev": "python3 -m http.server 4173",
@@ -10,6 +10,6 @@
     "test": "node scripts/verify.mjs",
     "build": "node scripts/build.mjs"
   },
-  "keywords": ["pokemon", "poker", "vercel", "static-game"],
+  "keywords": ["pokemon", "holdem", "poker", "vercel", "static-game"],
   "license": "UNLICENSED"
 }

@@ -2,14 +2,22 @@ import {
   GAME_CONFIG,
   TYPES,
   RANKS,
-  dealHands,
+  dealHoldemRound,
   expectedPrizeStats,
   formatMoney,
   formatPercent,
   getPrizeForWins,
   getRandomTrivia,
-  scoreRound
+  scoreHoldemRound
 } from "./engine.js";
+
+const STAGES = {
+  WAITING: "waiting",
+  PREFLOP: "preflop",
+  FLOP: "flop",
+  TURN: "turn",
+  SHOWDOWN: "showdown"
+};
 
 const state = {
   scoredHands: 0,
@@ -25,7 +33,7 @@ const state = {
 };
 
 const elements = {
-  dealButton: document.querySelector("#deal-button"),
+  actionButton: document.querySelector("#deal-button"),
   newGameButton: document.querySelector("#new-game-button"),
   triviaToggle: document.querySelector("#trivia-toggle"),
   scoredHands: document.querySelector("#scored-hands"),
@@ -34,8 +42,10 @@ const elements = {
   pushes: document.querySelector("#pushes"),
   playerCards: document.querySelector("#player-cards"),
   dealerCards: document.querySelector("#dealer-cards"),
+  communityCards: document.querySelector("#community-cards"),
   playerHandName: document.querySelector("#player-hand-name"),
   dealerHandName: document.querySelector("#dealer-hand-name"),
+  boardStatus: document.querySelector("#board-status"),
   resultBanner: document.querySelector("#result-banner"),
   finalPrize: document.querySelector("#final-prize"),
   currentPrize: document.querySelector("#current-prize"),
@@ -47,6 +57,15 @@ const elements = {
   triviaChoices: document.querySelector("#trivia-choices"),
   triviaFeedback: document.querySelector("#trivia-feedback")
 };
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
 
 function renderPrizeTable() {
   elements.prizeTable.innerHTML = GAME_CONFIG.prizeTable.map((prize) => {
@@ -91,21 +110,46 @@ function renderStatsPanel() {
   `;
 }
 
-function renderCards(container, cards) {
-  if (!cards || cards.length === 0) {
-    container.innerHTML = Array.from({ length: 5 }).map(() => {
-      return `<div class="card card-back"><span>?</span><small>Pokemon</small></div>`;
-    }).join("");
-    return;
+function cardMarkup(card, extraClass = "") {
+  if (!card) {
+    return `<div class="card card-back ${extraClass}"><span>?</span><small>Pokemon</small></div>`;
   }
 
-  container.innerHTML = cards.map((card) => {
-    return `<article class="card ${card.cssClass}" title="${card.title}">
-      <div class="card-top"><strong>${card.rankShort}</strong><span>${card.suitSymbol}</span></div>
-      <div class="card-center"><span class="card-role">${card.role}</span><strong>${card.typeName}</strong></div>
-      <div class="card-bottom">${card.pokerSuit}</div>
-    </article>`;
-  }).join("");
+  const safeTitle = escapeHtml(card.title);
+  const safeImage = card.imageUrl ? escapeHtml(card.imageUrl) : "";
+  const image = safeImage
+    ? `<img class="card-art" src="${safeImage}" alt="" loading="lazy" onerror="this.closest('.card').classList.add('art-failed'); this.remove();" />`
+    : "";
+
+  return `<article class="card ${card.cssClass} ${extraClass}" title="${safeTitle}">
+    ${image}
+    <div class="card-overlay"></div>
+    <div class="card-top"><strong>${card.rankShort}</strong><span>${card.suitSymbol}</span></div>
+    <div class="card-center"><span class="card-role">${card.role}</span><strong>${card.typeName}</strong></div>
+    <div class="card-bottom">${card.pokerSuit}</div>
+  </article>`;
+}
+
+function renderCards(container, cards, slotCount, options = {}) {
+  const visibleCards = cards || [];
+  const bestIds = new Set(options.bestCards?.map((card) => card.id) || []);
+  const html = [];
+  for (let index = 0; index < slotCount; index += 1) {
+    const card = options.hidden ? null : visibleCards[index];
+    const bestClass = card && bestIds.has(card.id) ? "best-card" : "";
+    html.push(cardMarkup(card, bestClass));
+  }
+  container.innerHTML = html.join("");
+}
+
+function renderCommunityCards() {
+  const round = state.currentRound;
+  if (!round) {
+    renderCards(elements.communityCards, [], 5);
+    return;
+  }
+  const visible = round.community.slice(0, round.visibleCommunityCount);
+  renderCards(elements.communityCards, visible, 5, { bestCards: round.bestCommunityCards || [] });
 }
 
 function showBanner(message, tone = "neutral") {
@@ -118,9 +162,9 @@ function renderTrivia() {
 
   elements.triviaQuestion.textContent = state.currentTrivia.question;
   elements.triviaChoices.innerHTML = state.currentTrivia.choices.map((choice) => {
-    return `<button class="choice-button" type="button" data-choice="${choice}">${choice}</button>`;
+    return `<button class="choice-button" type="button" data-choice="${escapeHtml(choice)}">${escapeHtml(choice)}</button>`;
   }).join("");
-  elements.triviaFeedback.textContent = state.triviaRequired ? "Answer correctly to unlock the next hand." : "Trivia is optional in this mode.";
+  elements.triviaFeedback.textContent = state.triviaRequired ? "Answer correctly to unlock the next Hold'em deal." : "Trivia is optional in this mode.";
   elements.triviaFeedback.className = "muted";
 }
 
@@ -132,7 +176,7 @@ function resetTriviaForNextHand() {
 
 function renderLog() {
   if (state.handLog.length === 0) {
-    elements.handLog.innerHTML = `<li>No hands dealt yet.</li>`;
+    elements.handLog.innerHTML = `<li>No Hold'em showdowns yet.</li>`;
     return;
   }
   elements.handLog.innerHTML = state.handLog.map((entry) => {
@@ -158,20 +202,49 @@ function renderScoreboard() {
   }
 }
 
+function getActionButtonText() {
+  if (state.gameOver) return "Game complete";
+  if (!state.currentRound || state.currentRound.stage === STAGES.SHOWDOWN) {
+    if (state.triviaRequired && !state.triviaUnlocked) return "Answer trivia first";
+    return state.scoredHands === 0 && state.pushes === 0 ? "Deal hole cards" : "Deal next hand";
+  }
+  if (state.currentRound.stage === STAGES.PREFLOP) return "Reveal flop";
+  if (state.currentRound.stage === STAGES.FLOP) return "Reveal turn";
+  if (state.currentRound.stage === STAGES.TURN) return "Reveal river and showdown";
+  return "Continue";
+}
+
 function renderButtons() {
-  const canDeal = !state.gameOver && (!state.triviaRequired || state.triviaUnlocked);
-  elements.dealButton.disabled = !canDeal;
-  if (state.gameOver) elements.dealButton.textContent = "Game complete";
-  else if (state.triviaRequired && !state.triviaUnlocked) elements.dealButton.textContent = "Answer trivia first";
-  else elements.dealButton.textContent = state.scoredHands === 0 ? "Deal first hand" : "Deal next hand";
+  const betweenHands = !state.currentRound || state.currentRound.stage === STAGES.SHOWDOWN;
+  const lockedByTrivia = betweenHands && state.triviaRequired && !state.triviaUnlocked;
+  elements.actionButton.disabled = state.gameOver || lockedByTrivia;
+  elements.actionButton.textContent = getActionButtonText();
 }
 
 function renderRound() {
   const round = state.currentRound;
-  renderCards(elements.playerCards, round ? round.playerCards : []);
-  renderCards(elements.dealerCards, round ? round.dealerCards : []);
-  elements.playerHandName.textContent = round ? round.playerEvaluation.label : "Waiting to deal";
-  elements.dealerHandName.textContent = round ? round.dealerEvaluation.label : "Waiting to deal";
+  if (!round) {
+    renderCards(elements.playerCards, [], 2);
+    renderCards(elements.dealerCards, [], 2);
+    renderCommunityCards();
+    elements.playerHandName.textContent = "Waiting to deal";
+    elements.dealerHandName.textContent = "Hidden until showdown";
+    elements.boardStatus.textContent = "Answer trivia, then deal 2 private cards to each side.";
+    return;
+  }
+
+  const dealerHidden = round.stage !== STAGES.SHOWDOWN;
+  renderCards(elements.playerCards, round.playerHole, 2, { bestCards: round.playerEvaluation?.cards || [] });
+  renderCards(elements.dealerCards, round.dealerHole, 2, { hidden: dealerHidden, bestCards: round.dealerEvaluation?.cards || [] });
+  renderCommunityCards();
+
+  elements.playerHandName.textContent = round.playerEvaluation ? round.playerEvaluation.label : "2 hole cards";
+  elements.dealerHandName.textContent = round.dealerEvaluation ? round.dealerEvaluation.label : "Hidden until showdown";
+
+  if (round.stage === STAGES.PREFLOP) elements.boardStatus.textContent = "Pre-flop: player has 2 hole cards. Dealer is hidden.";
+  if (round.stage === STAGES.FLOP) elements.boardStatus.textContent = "Flop revealed: 3 community cards are shared by both sides.";
+  if (round.stage === STAGES.TURN) elements.boardStatus.textContent = "Turn revealed: 4 community cards are visible. River comes next.";
+  if (round.stage === STAGES.SHOWDOWN) elements.boardStatus.textContent = "Showdown: best 5-card hand from each side's 2 hole cards plus the 5-card board wins.";
 }
 
 function render() {
@@ -184,37 +257,57 @@ function render() {
 function createRoundLog(roundNumber, result, score) {
   const playerLabel = score.playerEvaluation.label;
   const dealerLabel = score.dealerEvaluation.label;
-  if (result === "player") return { title: `Hand ${roundNumber}: Player wins`, detail: `${playerLabel} beats dealer ${dealerLabel}.` };
-  if (result === "dealer") return { title: `Hand ${roundNumber}: Dealer wins`, detail: `Dealer ${dealerLabel} beats player ${playerLabel}.` };
-  return { title: "Push", detail: `${playerLabel} ties ${dealerLabel}. Hand does not count.` };
+  if (result === "player") return { title: `Showdown ${roundNumber}: Player wins`, detail: `${playerLabel} beats dealer ${dealerLabel}.` };
+  if (result === "dealer") return { title: `Showdown ${roundNumber}: Dealer wins`, detail: `Dealer ${dealerLabel} beats player ${playerLabel}.` };
+  return { title: "Push", detail: `${playerLabel} ties ${dealerLabel}. Showdown does not count toward the 5 scored hands.` };
 }
 
-function dealNextHand() {
-  if (state.gameOver || (state.triviaRequired && !state.triviaUnlocked)) return;
+function startHoldemHand() {
+  const dealt = dealHoldemRound();
+  state.currentRound = {
+    playerHole: dealt.playerHole,
+    dealerHole: dealt.dealerHole,
+    community: dealt.community,
+    visibleCommunityCount: 0,
+    stage: STAGES.PREFLOP,
+    playerEvaluation: null,
+    dealerEvaluation: null,
+    result: null,
+    bestCommunityCards: []
+  };
+  state.triviaUnlocked = !state.triviaRequired;
+  showBanner("Hole cards dealt. Reveal the shared board one street at a time.", "neutral");
+  render();
+}
 
-  const dealt = dealHands();
-  const score = scoreRound(dealt.player, dealt.dealer);
+function finishShowdown() {
+  const round = state.currentRound;
+  const score = scoreHoldemRound(round.playerHole, round.dealerHole, round.community);
   const roundNumber = state.scoredHands + 1;
 
-  state.currentRound = {
-    playerCards: dealt.player,
-    dealerCards: dealt.dealer,
-    playerEvaluation: score.playerEvaluation,
-    dealerEvaluation: score.dealerEvaluation,
-    result: score.result
-  };
+  round.playerEvaluation = score.playerEvaluation;
+  round.dealerEvaluation = score.dealerEvaluation;
+  round.result = score.result;
+  round.stage = STAGES.SHOWDOWN;
+  round.visibleCommunityCount = 5;
+
+  const bestCommunity = new Map();
+  for (const card of [...score.playerEvaluation.cards, ...score.dealerEvaluation.cards]) {
+    if (round.community.some((communityCard) => communityCard.id === card.id)) bestCommunity.set(card.id, card);
+  }
+  round.bestCommunityCards = [...bestCommunity.values()];
 
   if (score.result === "player") {
     state.wins += 1;
     state.scoredHands += 1;
-    showBanner("Player wins this hand!", "win");
+    showBanner("Player wins the Hold'em showdown!", "win");
   } else if (score.result === "dealer") {
     state.dealerWins += 1;
     state.scoredHands += 1;
-    showBanner("Dealer wins this hand.", "loss");
+    showBanner("Dealer wins the Hold'em showdown.", "loss");
   } else {
     state.pushes += 1;
-    showBanner("Push. Same strength hand, so re-deal without counting it.", "push");
+    showBanner("Push. Same best 5-card hand, so replay without counting it.", "push");
   }
 
   state.handLog.unshift(createRoundLog(roundNumber, score.result, score));
@@ -225,6 +318,29 @@ function dealNextHand() {
     showBanner(`Game complete: ${state.wins} player wins. Prize: ${prize.prize}.`, "win");
   } else {
     resetTriviaForNextHand();
+  }
+}
+
+function advanceHand() {
+  if (state.gameOver) return;
+
+  if (!state.currentRound || state.currentRound.stage === STAGES.SHOWDOWN) {
+    if (state.triviaRequired && !state.triviaUnlocked) return;
+    startHoldemHand();
+    return;
+  }
+
+  const round = state.currentRound;
+  if (round.stage === STAGES.PREFLOP) {
+    round.stage = STAGES.FLOP;
+    round.visibleCommunityCount = 3;
+    showBanner("Flop revealed: 3 shared cards are on the board.", "neutral");
+  } else if (round.stage === STAGES.FLOP) {
+    round.stage = STAGES.TURN;
+    round.visibleCommunityCount = 4;
+    showBanner("Turn revealed: one card away from showdown.", "neutral");
+  } else if (round.stage === STAGES.TURN) {
+    finishShowdown();
   }
 
   render();
@@ -241,7 +357,7 @@ function newGame() {
   state.triviaRequired = elements.triviaToggle.checked;
   state.triviaUnlocked = !state.triviaRequired;
   state.currentTrivia = getRandomTrivia();
-  showBanner("New game ready. Win more hands to upgrade the guaranteed prize.", "neutral");
+  showBanner("New Hold'em game ready. Win more showdowns to upgrade the guaranteed prize.", "neutral");
   renderTrivia();
   render();
 }
@@ -261,11 +377,12 @@ function answerTrivia(choice) {
 }
 
 function attachEvents() {
-  elements.dealButton.addEventListener("click", dealNextHand);
+  elements.actionButton.addEventListener("click", advanceHand);
   elements.newGameButton.addEventListener("click", newGame);
   elements.triviaToggle.addEventListener("change", () => {
     state.triviaRequired = elements.triviaToggle.checked;
-    state.triviaUnlocked = !state.triviaRequired;
+    const betweenHands = !state.currentRound || state.currentRound.stage === STAGES.SHOWDOWN;
+    if (betweenHands) state.triviaUnlocked = !state.triviaRequired;
     renderTrivia();
     renderButtons();
   });

@@ -1,3 +1,5 @@
+import { CARD_IMAGE_OVERRIDES, getDefaultCardImageUrl } from "./cardImages.js";
+
 export const GAME_CONFIG = {
   entryFee: 25,
   scoredHands: 5,
@@ -54,15 +56,11 @@ export const TRIVIA_QUESTIONS = [
   { question: "Which Pokemon-card role acts as the Jack?", choices: ["Energy", "Supporter", "Male Trainer", "Female Trainer"], answer: "Supporter" },
   { question: "Which Pokemon-card role acts as the Queen?", choices: ["Energy", "Supporter", "Male Trainer", "Female Trainer"], answer: "Female Trainer" },
   { question: "Which Pokemon-card role acts as the King?", choices: ["Energy", "Supporter", "Male Trainer", "Female Trainer"], answer: "Male Trainer" },
+  { question: "In Hold'em, how many private hole cards does each side get?", choices: ["2", "3", "4", "5"], answer: "2" },
+  { question: "In Hold'em, how many community cards are shared by both sides?", choices: ["3", "4", "5", "7"], answer: "5" },
   { question: "Which hand is stronger?", choices: ["Straight", "Flush", "One Pair", "High Card"], answer: "Flush" },
   { question: "Which hand beats a Full House?", choices: ["Flush", "Straight", "Four of a Kind", "Two Pair"], answer: "Four of a Kind" }
 ];
-
-function getRank(value) {
-  const rank = RANKS.find((item) => item.value === value);
-  if (!rank) throw new Error(`Unknown rank value: ${value}`);
-  return rank;
-}
 
 function cardTitle(type, rank) {
   if (rank.role === "Pokemon") return `${type.name} Pokemon Lv. ${rank.short}`;
@@ -72,10 +70,12 @@ function cardTitle(type, rank) {
 
 export function createDeck() {
   const deck = [];
+  let imageIndex = 0;
   for (const type of TYPES) {
     for (const rank of RANKS) {
+      const id = `${type.key}-${rank.short}`;
       deck.push({
-        id: `${type.key}-${rank.short}`,
+        id,
         type: type.key,
         typeName: type.name,
         pokerSuit: type.pokerSuit,
@@ -84,8 +84,10 @@ export function createDeck() {
         rank: rank.value,
         rankShort: rank.short,
         role: rank.role,
-        title: cardTitle(type, rank)
+        title: cardTitle(type, rank),
+        imageUrl: CARD_IMAGE_OVERRIDES[id] || getDefaultCardImageUrl(imageIndex)
       });
+      imageIndex += 1;
     }
   }
   return deck;
@@ -100,9 +102,28 @@ export function shuffleDeck(deck, random = Math.random) {
   return copy;
 }
 
-export function dealHands(random = Math.random) {
+export function dealFiveCardHands(random = Math.random) {
   const deck = shuffleDeck(createDeck(), random);
   return { player: deck.slice(0, 5), dealer: deck.slice(5, 10), remainingDeck: deck.slice(10) };
+}
+
+export function dealHoldemRound(random = Math.random) {
+  const deck = shuffleDeck(createDeck(), random);
+  const playerHole = [deck[0], deck[2]];
+  const dealerHole = [deck[1], deck[3]];
+  const burn1 = deck[4];
+  const flop = [deck[5], deck[6], deck[7]];
+  const burn2 = deck[8];
+  const turn = deck[9];
+  const burn3 = deck[10];
+  const river = deck[11];
+  return {
+    playerHole,
+    dealerHole,
+    community: [...flop, turn, river],
+    burns: [burn1, burn2, burn3],
+    remainingDeck: deck.slice(12)
+  };
 }
 
 function countRanks(cards) {
@@ -138,24 +159,24 @@ export function evaluateHand(cards) {
   const straightHigh = getStraightHighCard(values);
   const isStraight = straightHigh !== null;
 
-  if (isStraight && isFlush) return { category: 8, label: HAND_LABELS[8], tiebreakers: [straightHigh] };
-  if (groups[0][1] === 4) return { category: 7, label: HAND_LABELS[7], tiebreakers: [groups[0][0], groups[1][0]] };
-  if (groups[0][1] === 3 && groups[1][1] === 2) return { category: 6, label: HAND_LABELS[6], tiebreakers: [groups[0][0], groups[1][0]] };
-  if (isFlush) return { category: 5, label: HAND_LABELS[5], tiebreakers: values };
-  if (isStraight) return { category: 4, label: HAND_LABELS[4], tiebreakers: [straightHigh] };
+  if (isStraight && isFlush) return { category: 8, label: HAND_LABELS[8], tiebreakers: [straightHigh], cards };
+  if (groups[0][1] === 4) return { category: 7, label: HAND_LABELS[7], tiebreakers: [groups[0][0], groups[1][0]], cards };
+  if (groups[0][1] === 3 && groups[1][1] === 2) return { category: 6, label: HAND_LABELS[6], tiebreakers: [groups[0][0], groups[1][0]], cards };
+  if (isFlush) return { category: 5, label: HAND_LABELS[5], tiebreakers: values, cards };
+  if (isStraight) return { category: 4, label: HAND_LABELS[4], tiebreakers: [straightHigh], cards };
   if (groups[0][1] === 3) {
     const kickers = groups.slice(1).map(([rank]) => rank).sort((a, b) => b - a);
-    return { category: 3, label: HAND_LABELS[3], tiebreakers: [groups[0][0], ...kickers] };
+    return { category: 3, label: HAND_LABELS[3], tiebreakers: [groups[0][0], ...kickers], cards };
   }
   if (groups[0][1] === 2 && groups[1][1] === 2) {
     const pairs = [groups[0][0], groups[1][0]].sort((a, b) => b - a);
-    return { category: 2, label: HAND_LABELS[2], tiebreakers: [...pairs, groups[2][0]] };
+    return { category: 2, label: HAND_LABELS[2], tiebreakers: [...pairs, groups[2][0]], cards };
   }
   if (groups[0][1] === 2) {
     const kickers = groups.slice(1).map(([rank]) => rank).sort((a, b) => b - a);
-    return { category: 1, label: HAND_LABELS[1], tiebreakers: [groups[0][0], ...kickers] };
+    return { category: 1, label: HAND_LABELS[1], tiebreakers: [groups[0][0], ...kickers], cards };
   }
-  return { category: 0, label: HAND_LABELS[0], tiebreakers: values };
+  return { category: 0, label: HAND_LABELS[0], tiebreakers: values, cards };
 }
 
 export function compareEvaluations(playerEvaluation, dealerEvaluation) {
@@ -171,7 +192,35 @@ export function compareEvaluations(playerEvaluation, dealerEvaluation) {
   return 0;
 }
 
-export function scoreRound(playerCards, dealerCards) {
+function buildCombinations(cards, size) {
+  const result = [];
+  const working = [];
+  function walk(start) {
+    if (working.length === size) {
+      result.push([...working]);
+      return;
+    }
+    for (let index = start; index <= cards.length - (size - working.length); index += 1) {
+      working.push(cards[index]);
+      walk(index + 1);
+      working.pop();
+    }
+  }
+  walk(0);
+  return result;
+}
+
+export function evaluateBestHand(cards) {
+  if (!Array.isArray(cards) || cards.length < 5) throw new Error("evaluateBestHand requires at least 5 cards.");
+  let best = null;
+  for (const combo of buildCombinations(cards, 5)) {
+    const evaluation = evaluateHand(combo);
+    if (!best || compareEvaluations(evaluation, best) > 0) best = evaluation;
+  }
+  return best;
+}
+
+export function scoreFiveCardRound(playerCards, dealerCards) {
   const playerEvaluation = evaluateHand(playerCards);
   const dealerEvaluation = evaluateHand(dealerCards);
   const comparison = compareEvaluations(playerEvaluation, dealerEvaluation);
@@ -182,6 +231,20 @@ export function scoreRound(playerCards, dealerCards) {
     result: comparison > 0 ? "player" : comparison < 0 ? "dealer" : "push"
   };
 }
+
+export function scoreHoldemRound(playerHole, dealerHole, community) {
+  const playerEvaluation = evaluateBestHand([...playerHole, ...community]);
+  const dealerEvaluation = evaluateBestHand([...dealerHole, ...community]);
+  const comparison = compareEvaluations(playerEvaluation, dealerEvaluation);
+  return {
+    playerEvaluation,
+    dealerEvaluation,
+    comparison,
+    result: comparison > 0 ? "player" : comparison < 0 ? "dealer" : "push"
+  };
+}
+
+export const scoreRound = scoreFiveCardRound;
 
 export function getPrizeForWins(wins, config = GAME_CONFIG) {
   const prize = config.prizeTable.find((item) => wins >= item.minWins && wins <= item.maxWins);
@@ -233,10 +296,11 @@ export function getRandomTrivia(random = Math.random) {
 
 export function buildCardByRankAndType(rankValue, typeKey) {
   const type = TYPES.find((item) => item.key === typeKey);
-  const rank = getRank(rankValue);
-  if (!type) throw new Error(`Unknown type key: ${typeKey}`);
+  const rank = RANKS.find((item) => item.value === rankValue);
+  if (!type || !rank) throw new Error(`Unknown card: ${rankValue} ${typeKey}`);
+  const id = `${type.key}-${rank.short}`;
   return {
-    id: `${type.key}-${rank.short}`,
+    id,
     type: type.key,
     typeName: type.name,
     pokerSuit: type.pokerSuit,
@@ -245,6 +309,7 @@ export function buildCardByRankAndType(rankValue, typeKey) {
     rank: rank.value,
     rankShort: rank.short,
     role: rank.role,
-    title: cardTitle(type, rank)
+    title: cardTitle(type, rank),
+    imageUrl: CARD_IMAGE_OVERRIDES[id] || null
   };
 }
