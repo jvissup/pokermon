@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pokemon Poker</title>
+    <meta name="description" content="A Vercel-ready Pokemon Poker trivia game." />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page-shell">
+      <section class="hero panel">
+        <div>
+          <p class="eyebrow">$25 guaranteed prize game</p>
+          <h1>Pokemon Poker</h1>
+          <p class="hero-copy">Play five scored hands against the dealer. Pokemon cards replace poker cards, ties push, and every player leaves with a prize.</p>
+        </div>
+        <div class="hero-actions">
+          <button id="deal-button" class="primary-button" type="button">Deal first hand</button>
+          <button id="new-game-button" class="secondary-button" type="button">New game</button>
+        </div>
+      </section>
+
+      <section class="score-grid">
+        <article class="score-card"><span>Scored hands</span><strong id="scored-hands">0/5</strong></article>
+        <article class="score-card win-card"><span>Player wins</span><strong id="wins">0</strong></article>
+        <article class="score-card loss-card"><span>Dealer wins</span><strong id="dealer-wins">0</strong></article>
+        <article class="score-card push-card"><span>Pushes</span><strong id="pushes">0</strong></article>
+      </section>
+
+      <section id="result-banner" class="result-banner neutral">New game ready. Win more hands to upgrade the guaranteed prize.</section>
+
+      <section class="game-grid">
+        <section class="table-area panel">
+          <div class="hand-header"><div><p class="eyebrow">Player hand</p><h2 id="player-hand-name">Waiting to deal</h2></div></div>
+          <div id="player-cards" class="card-row" aria-label="Player cards"></div>
+          <div class="divider"></div>
+          <div class="hand-header"><div><p class="eyebrow">Dealer hand</p><h2 id="dealer-hand-name">Waiting to deal</h2></div></div>
+          <div id="dealer-cards" class="card-row" aria-label="Dealer cards"></div>
+        </section>
+
+        <aside class="side-stack">
+          <section class="panel trivia-panel">
+            <div class="section-heading"><p class="eyebrow">Trivia gate</p><h2>Question of the hand</h2></div>
+            <label class="toggle-row"><input id="trivia-toggle" type="checkbox" checked />Require trivia before each hand</label>
+            <p id="trivia-question" class="trivia-question"></p>
+            <div id="trivia-choices" class="choice-grid"></div>
+            <p id="trivia-feedback" class="muted"></p>
+          </section>
+
+          <section class="panel prize-panel">
+            <div class="section-heading"><p class="eyebrow">Prize ladder</p><h2>Guaranteed prize</h2></div>
+            <p id="current-prize" class="current-prize"></p>
+            <p id="final-prize" class="final-prize" hidden></p>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Result</th><th>Prize</th><th>Retail</th><th>Cost</th></tr></thead>
+                <tbody id="prize-table-body"></tbody>
+              </table>
+            </div>
+          </section>
+        </aside>
+      </section>
+
+      <section class="info-grid">
+        <section class="panel">
+          <div class="section-heading"><p class="eyebrow">Card conversion</p><h2>Pokemon cards as poker cards</h2></div>
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Pokemon card</th><th>Poker card</th><th>Symbol</th></tr></thead>
+              <tbody id="mapping-table-body"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading"><p class="eyebrow">Operator math</p><h2>80-ish percent retail RTP target</h2></div>
+          <div id="stats-panel" class="metrics-grid"></div>
+          <p class="fine-print">RTP estimate assumes five scored hands, push ties, and roughly 50/50 resolved hand odds. Trivia unlocks the deal only; it does not change card odds.</p>
+        </section>
+      </section>
+
+      <section class="panel log-panel">
+        <div class="section-heading"><p class="eyebrow">Round history</p><h2>Hand log</h2></div>
+        <ol id="hand-log" class="hand-log"></ol>
+      </section>
+    </main>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

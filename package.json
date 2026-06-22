@@ -1,0 +1,15 @@
+{
+  "name": "pokemon-poker-prize-game",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A Vercel-ready static Pokemon Poker prize game.",
+  "type": "module",
+  "scripts": {
+    "dev": "python3 -m http.server 4173",
+    "start": "python3 -m http.server 4173",
+    "test": "node scripts/verify.mjs",
+    "build": "node scripts/build.mjs"
+  },
+  "keywords": ["pokemon", "poker", "vercel", "static-game"],
+  "license": "UNLICENSED"
+}
