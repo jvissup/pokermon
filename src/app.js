@@ -49,7 +49,6 @@ const elements = {
   resultBanner: document.querySelector("#result-banner"),
   finalPrize: document.querySelector("#final-prize"),
   currentPrize: document.querySelector("#current-prize"),
-  prizeTable: document.querySelector("#prize-table-body"),
   mappingTable: document.querySelector("#mapping-table-body"),
   statsPanel: document.querySelector("#stats-panel"),
   handLog: document.querySelector("#hand-log"),
@@ -65,17 +64,6 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
-}
-
-function renderPrizeTable() {
-  elements.prizeTable.innerHTML = GAME_CONFIG.prizeTable.map((prize) => {
-    return `<tr>
-      <td>${prize.label}</td>
-      <td>${prize.prize}</td>
-      <td>${formatMoney(prize.retailValue)}</td>
-      <td>${formatMoney(prize.cost)}</td>
-    </tr>`;
-  }).join("");
 }
 
 function renderMappingTable() {
@@ -394,7 +382,6 @@ function attachEvents() {
 }
 
 function init() {
-  renderPrizeTable();
   renderMappingTable();
   renderStatsPanel();
   attachEvents();
